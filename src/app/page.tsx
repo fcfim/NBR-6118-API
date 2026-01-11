@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { SectionVisualizer } from "@/components/sections/SectionVisualizer";
+import { StrainDiagram } from "@/components/charts/StrainDiagram";
+import { PunchingDiagram } from "@/components/charts/PunchingDiagram";
 import {
   Calculator,
   Layers,
@@ -1379,6 +1381,61 @@ function ResultsPanel({
           </div>
         </div>
       )}
+
+      {/* Strain Diagram - shown for flexure results */}
+      {data?.parameters &&
+        (data.parameters as Record<string, unknown>)?.xi !== undefined && (
+          <div className="bg-white border border-slate-200 rounded-lg p-4">
+            <p className="text-sm font-medium text-slate-700 mb-3">
+              Diagrama de Deformações
+            </p>
+            <div className="flex justify-center">
+              <StrainDiagram
+                x={(data.parameters as Record<string, number>).x}
+                d={(data.inputs as Record<string, number>)?.d || 45}
+                h={(data.inputs as Record<string, number>)?.h || 50}
+                b={(data.inputs as Record<string, number>)?.b || 20}
+                xi={(data.parameters as Record<string, number>).xi}
+                domain={
+                  (data.parameters as Record<string, string>).domain || ""
+                }
+                width={380}
+                height={260}
+              />
+            </div>
+          </div>
+        )}
+
+      {/* Punching Diagram - shown for punching results */}
+      {data?.perimeter &&
+        (data.inputs as Record<string, unknown>)?.pillarType !== undefined && (
+          <div className="bg-white border border-slate-200 rounded-lg p-4">
+            <p className="text-sm font-medium text-slate-700 mb-3">
+              Perímetros de Punção
+            </p>
+            <div className="flex justify-center">
+              <PunchingDiagram
+                a={(data.inputs as Record<string, number>).a}
+                b={(data.inputs as Record<string, number>).b}
+                d={(data.perimeter as Record<string, number>).d}
+                u={(data.perimeter as Record<string, number>).u}
+                pillarType={
+                  (data.inputs as Record<string, string>).pillarType as
+                    | "internal"
+                    | "edge"
+                    | "corner"
+                }
+                description={
+                  (data.perimeter as Record<string, string>).description
+                }
+                tau_sd={(data.stress as Record<string, number>)?.tau_sd}
+                tau_Rd1={(data.stress as Record<string, number>)?.tau_Rd1}
+                width={340}
+                height={280}
+              />
+            </div>
+          </div>
+        )}
 
       <div className="bg-slate-50 rounded-lg p-4 max-h-96 overflow-auto">
         <pre className="text-xs text-slate-700 whitespace-pre-wrap">
