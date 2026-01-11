@@ -4,6 +4,8 @@ import { useState } from "react";
 import { SectionVisualizer } from "@/components/sections/SectionVisualizer";
 import { StrainDiagram } from "@/components/charts/StrainDiagram";
 import { PunchingDiagram } from "@/components/charts/PunchingDiagram";
+import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
 import {
   Calculator,
   Layers,
@@ -142,30 +144,12 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-linear-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                <Calculator className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-slate-900">
-                  NBR 6118 API
-                </h1>
-                <p className="text-xs text-slate-500">Cálculo Estrutural</p>
-              </div>
-            </div>
-            <div className="text-sm text-slate-500">
-              12 Endpoints • NBR 6118:2023
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Content */}
+      <div className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Sidebar - Module Selection */}
           <aside className="lg:col-span-3">
@@ -247,6 +231,9 @@ export default function Dashboard() {
           </main>
         </div>
       </div>
+
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }
