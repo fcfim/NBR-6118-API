@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SectionVisualizer } from "@/components/sections/SectionVisualizer";
 import {
   Calculator,
   Layers,
@@ -376,7 +377,8 @@ function renderFormFields(
   updateField: (key: string, value: unknown) => void
 ) {
   switch (moduleKey) {
-    case "section":
+    case "section": {
+      const sectionType = (formData.type as string) || "rectangular";
       return (
         <div className="space-y-4">
           <SelectField
@@ -386,28 +388,153 @@ function renderFormFields(
             onChange={updateField}
             options={[
               { value: "rectangular", label: "Retangular" },
-              { value: "t", label: "T" },
-              { value: "i", label: "I" },
+              { value: "T", label: "T (Viga T)" },
+              { value: "I", label: "I (Duplo T)" },
             ]}
           />
-          <div className="grid grid-cols-2 gap-4">
-            <InputField
-              label="Largura"
-              name="width"
-              value={formData.width}
-              onChange={updateField}
-              unit="cm"
-            />
-            <InputField
-              label="Altura"
-              name="height"
-              value={formData.height}
-              onChange={updateField}
-              unit="cm"
-            />
-          </div>
+
+          {/* Rectangular Section Fields */}
+          {sectionType === "rectangular" && (
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <p className="text-sm font-medium text-slate-700 mb-2">
+                Dimensões
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <InputField
+                  label="Largura (b)"
+                  name="width"
+                  value={formData.width}
+                  onChange={updateField}
+                  unit="cm"
+                />
+                <InputField
+                  label="Altura (h)"
+                  name="height"
+                  value={formData.height}
+                  onChange={updateField}
+                  unit="cm"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* T-Section Fields */}
+          {sectionType === "T" && (
+            <div className="space-y-3">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm font-medium text-blue-700 mb-2">
+                  Mesa (Flange)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura mesa (bf)"
+                    name="bf"
+                    value={formData.bf}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura mesa (hf)"
+                    name="hf"
+                    value={formData.hf}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm font-medium text-slate-700 mb-2">
+                  Alma (Web)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura alma (bw)"
+                    name="bw"
+                    value={formData.bw}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura total (h)"
+                    name="h"
+                    value={formData.h}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* I-Section Fields */}
+          {sectionType === "I" && (
+            <div className="space-y-3">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm font-medium text-blue-700 mb-2">
+                  Mesa Superior
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura (bf)"
+                    name="bf"
+                    value={formData.bf}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura (hf)"
+                    name="hf"
+                    value={formData.hf}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm font-medium text-slate-700 mb-2">Alma</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura (bw)"
+                    name="bw"
+                    value={formData.bw}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura total (h)"
+                    name="h"
+                    value={formData.h}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm font-medium text-amber-700 mb-2">
+                  Mesa Inferior
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura (bi)"
+                    name="bi"
+                    value={formData.bi}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura (hi)"
+                    name="hi"
+                    value={formData.hi}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
+    }
 
     case "beam-flexure":
       return (
@@ -1022,12 +1149,35 @@ function buildPayload(
   formData: Record<string, unknown>
 ): Record<string, unknown> {
   switch (moduleKey) {
-    case "section":
-      return {
-        type: formData.type || "rectangular",
-        width: formData.width || 20,
-        height: formData.height || 50,
-      };
+    case "section": {
+      const type = (formData.type as string) || "rectangular";
+      if (type === "rectangular") {
+        return {
+          type,
+          width: formData.width || 20,
+          height: formData.height || 50,
+        };
+      } else if (type === "T") {
+        return {
+          type,
+          bf: formData.bf || 60,
+          hf: formData.hf || 12,
+          bw: formData.bw || 20,
+          h: formData.h || 50,
+        };
+      } else {
+        // I-Section
+        return {
+          type,
+          bf: formData.bf || 60,
+          hf: formData.hf || 12,
+          bw: formData.bw || 20,
+          h: formData.h || 60,
+          bi: formData.bi || 60,
+          hi: formData.hi || 12,
+        };
+      }
+    }
     case "beam-flexure":
       return {
         section: {
@@ -1193,6 +1343,11 @@ function ResultsPanel({
     );
   }
 
+  // Type-safe data extraction
+  const data = result.data as Record<string, unknown> | undefined;
+  const points = data?.points as Array<{ x: number; y: number }> | undefined;
+  const properties = data?.properties as Record<string, number> | undefined;
+
   return (
     <div className="space-y-4">
       <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center gap-3">
@@ -1201,6 +1356,29 @@ function ResultsPanel({
           Cálculo realizado com sucesso
         </p>
       </div>
+
+      {/* Section Visualizer - only shown when points are available */}
+      {points && points.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
+          <p className="text-sm font-medium text-slate-700 mb-3">
+            Visualização da Seção
+          </p>
+          <div className="flex justify-center">
+            <SectionVisualizer
+              points={points}
+              centroid={
+                properties?.xc !== undefined && properties?.yc !== undefined
+                  ? { x: properties.xc, y: properties.yc }
+                  : undefined
+              }
+              width={320}
+              height={280}
+              showGrid={true}
+              showDimensions={true}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="bg-slate-50 rounded-lg p-4 max-h-96 overflow-auto">
         <pre className="text-xs text-slate-700 whitespace-pre-wrap">
