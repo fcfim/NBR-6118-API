@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { SectionVisualizer } from "@/components/sections/SectionVisualizer";
 import { StrainDiagram } from "@/components/charts/StrainDiagram";
 import { PunchingDiagram } from "@/components/charts/PunchingDiagram";
@@ -27,17 +28,20 @@ export function ChartsPanel({ result, activeModule }: ChartsPanelProps) {
   const stress = data?.stress as Record<string, number> | undefined;
 
   // Determine which charts to show based on module and data
-  const showSectionVisualizer =
-    activeModule === "section" && points && points.length > 0;
-  const showStrainDiagram =
-    activeModule === "beam-flexure" && parameters?.xi !== undefined;
-  const showPunchingDiagram =
-    activeModule === "punching" && perimeter && inputs?.pillarType;
-  const showShearDiagram = activeModule === "beam-shear" && data?.stirrups;
-  const showDeflectionDiagram =
-    activeModule === "deflection" && data?.deflection;
-  const showCrackingDiagram = activeModule === "cracking" && data?.cracking;
-  const showColumnDiagram = activeModule === "column" && data?.slenderness;
+  const showSectionVisualizer: boolean =
+    activeModule === "section" && Array.isArray(points) && points.length > 0;
+  const showStrainDiagram: boolean =
+    activeModule === "beam-flexure" && parameters?.xi != null;
+  const showPunchingDiagram: boolean =
+    activeModule === "punching" && !!perimeter && !!inputs?.pillarType;
+  const showShearDiagram: boolean =
+    activeModule === "beam-shear" && !!data?.stirrups;
+  const showDeflectionDiagram: boolean =
+    activeModule === "deflection" && !!data?.deflection;
+  const showCrackingDiagram: boolean =
+    activeModule === "cracking" && !!data?.cracking;
+  const showColumnDiagram: boolean =
+    activeModule === "column" && !!data?.slenderness;
 
   // If no charts to show, return null
   if (
@@ -71,7 +75,7 @@ export function ChartsPanel({ result, activeModule }: ChartsPanelProps) {
               </p>
               <div className="flex justify-center">
                 <SectionVisualizer
-                  points={points}
+                  points={points!}
                   centroid={
                     properties?.xc !== undefined && properties?.yc !== undefined
                       ? { x: properties.xc, y: properties.yc }
@@ -94,12 +98,12 @@ export function ChartsPanel({ result, activeModule }: ChartsPanelProps) {
               </p>
               <div className="flex justify-center">
                 <StrainDiagram
-                  x={(parameters as Record<string, number>).x}
-                  d={(inputs as Record<string, number>)?.d || 45}
-                  h={(inputs as Record<string, number>)?.h || 50}
-                  b={(inputs as Record<string, number>)?.b || 20}
-                  xi={(parameters as Record<string, number>).xi}
-                  domain={(parameters as Record<string, string>).domain || ""}
+                  x={Number(parameters?.x) || 10}
+                  d={Number(inputs?.d) || 45}
+                  h={Number(inputs?.h) || 50}
+                  b={Number(inputs?.b) || 20}
+                  xi={Number(parameters?.xi) || 0.4}
+                  domain={String(parameters?.domain || "2")}
                   width={450}
                   height={320}
                 />
@@ -417,7 +421,7 @@ export function ChartsPanel({ result, activeModule }: ChartsPanelProps) {
                 Verificação de Fissuração
               </p>
               <div className="flex flex-col items-center justify-center">
-                {(() => {
+                {((): React.ReactElement => {
                   const cracking = data.cracking as Record<string, unknown>;
                   const wk = (cracking?.wk as number) || 0;
                   const wk_limit = (cracking?.wk_limit as number) || 0.3;
@@ -554,7 +558,7 @@ export function ChartsPanel({ result, activeModule }: ChartsPanelProps) {
                 Seção do Pilar e Esbeltez
               </p>
               <div className="flex flex-col items-center justify-center">
-                {(() => {
+                {((): React.ReactElement => {
                   const geometry = data.geometry as Record<string, number>;
                   const slenderness = data.slenderness as Record<
                     string,

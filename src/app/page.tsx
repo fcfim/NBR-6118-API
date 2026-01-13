@@ -1179,7 +1179,7 @@ function buildPayload(
           concrete: formData.concrete || "C25",
           steel: formData.steel || "CA-50",
         },
-        loading: { mk: { value: formData.mk || 45, unit: "kN.m" } },
+        loading: { mk: { value: formData.mk || 80, unit: "kN.m" } },
         parameters: { concreteCover: formData.cover || 2.5 },
       };
     case "beam-shear":
@@ -1193,7 +1193,7 @@ function buildPayload(
           concrete: formData.concrete || "C25",
           stirrupSteel: formData.steel || "CA-50",
         },
-        loading: { vsd: formData.vsd || 80 },
+        loading: { vsd: formData.vsd || 120 },
         parameters: {
           d: formData.d || 45,
           model: parseInt(formData.model as string) || 1,
@@ -1207,7 +1207,7 @@ function buildPayload(
           concrete: formData.concrete || "C30",
           steel: formData.steel || "CA-50",
         },
-        loading: { nd: formData.nd || 1200, mx_top: formData.mx_top || 0 },
+        loading: { nd: formData.nd || 800, mx_top: formData.mx_top || 50 },
       };
     case "slab":
       return {
@@ -1217,7 +1217,7 @@ function buildPayload(
           h: formData.h || 12,
         },
         materials: { concrete: formData.concrete || "C25" },
-        loading: { dead: formData.dead || 5, live: formData.live || 2 },
+        loading: { dead: formData.dead || 4, live: formData.live || 2.5 },
       };
     case "anchorage":
       return {
@@ -1244,7 +1244,7 @@ function buildPayload(
           steel: formData.steel || "CA-50",
         },
         loading: {
-          tsd: { value: formData.tsd || 15, unit: "kN.m" },
+          tsd: { value: formData.tsd || 10, unit: "kN.m" },
           vsd: formData.vsd ? { value: formData.vsd, unit: "kN" } : undefined,
           vrd2: formData.vrd2 || undefined,
         },
@@ -1258,7 +1258,7 @@ function buildPayload(
           type: formData.pillarType || "internal",
         },
         materials: { concrete: formData.concrete || "C30" },
-        loading: { fsd: formData.fsd || 500 },
+        loading: { fsd: formData.fsd || 600 },
         reinforcement: {
           rho_x: formData.rho_x || 0.005,
           rho_y: formData.rho_y || 0.005,
@@ -1273,7 +1273,7 @@ function buildPayload(
         },
         materials: { concrete: formData.concrete || "C25" },
         loading: {
-          ma: { value: formData.mk || 45, unit: "kN.m" },
+          ma: { value: formData.mk || 70, unit: "kN.m" },
           span: { value: formData.span || 500, unit: "cm" },
         },
         parameters: {
@@ -1290,7 +1290,7 @@ function buildPayload(
           height: formData.height || 50,
         },
         materials: { concrete: formData.concrete || "C25" },
-        loading: { ms: { value: formData.ms || 30, unit: "kN.m" } },
+        loading: { ms: { value: formData.ms || 50, unit: "kN.m" } },
         reinforcement: {
           As: formData.as || 5,
         },
