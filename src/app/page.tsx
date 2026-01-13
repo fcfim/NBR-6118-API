@@ -1272,9 +1272,14 @@ function buildPayload(
           height: formData.height || 50,
         },
         materials: { concrete: formData.concrete || "C25" },
-        span: formData.span || 500,
-        loading: { mk: { value: formData.mk || 45, unit: "kN.m" } },
-        reinforcement: { as: formData.as || 5 },
+        loading: {
+          ma: { value: formData.mk || 45, unit: "kN.m" },
+          span: { value: formData.span || 500, unit: "cm" },
+        },
+        parameters: {
+          beamType: "simple",
+          As: formData.as || 5,
+        },
       };
     case "cracking":
       return {
