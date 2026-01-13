@@ -114,6 +114,75 @@ const MODULES: {
   },
 ];
 
+// Required fields for each module
+const REQUIRED_FIELDS: Record<ModuleKey, { key: string; label: string }[]> = {
+  section: [{ key: "type", label: "Tipo de Seção" }],
+  "beam-flexure": [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "mk", label: "Momento Característico (Mk)" },
+  ],
+  "beam-shear": [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "vsd", label: "Cortante de Cálculo (Vsd)" },
+  ],
+  "beam-torsion": [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "tsd", label: "Torção de Cálculo (Tsd)" },
+  ],
+  column: [
+    { key: "bx", label: "Dimensão bx" },
+    { key: "by", label: "Dimensão by" },
+    { key: "length", label: "Comprimento" },
+    { key: "nd", label: "Força Normal (Nd)" },
+  ],
+  slab: [
+    { key: "Lx", label: "Vão Lx" },
+    { key: "Ly", label: "Vão Ly" },
+    { key: "h", label: "Espessura (h)" },
+  ],
+  punching: [
+    { key: "h", label: "Espessura da Laje (h)" },
+    { key: "a", label: "Dimensão a do pilar" },
+    { key: "b", label: "Dimensão b do pilar" },
+    { key: "fsd", label: "Força de Punção (Fsd)" },
+  ],
+  deflection: [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "mk", label: "Momento de Serviço (Ma)" },
+    { key: "span", label: "Vão (L)" },
+    { key: "as", label: "Área de Aço (As)" },
+  ],
+  cracking: [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "ms", label: "Momento de Serviço (Ms)" },
+    { key: "diameter", label: "Diâmetro da Barra" },
+    { key: "as", label: "Área de Aço (As)" },
+  ],
+  anchorage: [{ key: "diameter", label: "Diâmetro da Barra" }],
+};
+
+// Validate required fields
+function validateFields(
+  moduleKey: ModuleKey,
+  formData: Record<string, unknown>
+): string[] {
+  const errors: string[] = [];
+  const required = REQUIRED_FIELDS[moduleKey] || [];
+
+  for (const field of required) {
+    const value = formData[field.key];
+    if (value === undefined || value === "" || value === null) {
+      errors.push(`${field.label} é obrigatório`);
+    }
+  }
+  return errors;
+}
+
 export default function Dashboard() {
   const [activeModule, setActiveModule] = useState<ModuleKey>("section");
   const [result, setResult] = useState<CalculationResult | null>(null);
@@ -250,19 +319,48 @@ function ModuleForm({
   isCalculating: boolean;
 }) {
   const [formData, setFormData] = useState<Record<string, unknown>>({});
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate required fields
+    const errors = validateFields(moduleKey, formData);
+    setValidationErrors(errors);
+
+    if (errors.length > 0) {
+      return; // Don't submit if there are validation errors
+    }
+
     onCalculate(buildPayload(moduleKey, formData));
   };
 
   const updateField = (key: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
+    // Clear validation errors when user starts typing
+    if (validationErrors.length > 0) {
+      setValidationErrors([]);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {renderFormFields(moduleKey, formData, updateField)}
+
+      {/* Validation Errors */}
+      {validationErrors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-red-700 font-medium text-sm mb-1">
+            <AlertCircle className="w-4 h-4" />
+            Campos obrigatórios não preenchidos:
+          </div>
+          <ul className="list-disc list-inside text-sm text-red-600 space-y-0.5">
+            {validationErrors.map((error, i) => (
+              <li key={i}>{error}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <button
         type="submit"
