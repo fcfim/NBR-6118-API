@@ -443,7 +443,17 @@ function ModuleForm({
   };
 
   const updateField = (key: string, value: unknown) => {
-    setFormData((prev) => ({ ...prev, [key]: value }));
+    // When section type changes, apply appropriate default values
+    if (moduleKey === "section" && key === "type") {
+      const sectionDefaults: Record<string, Record<string, unknown>> = {
+        rectangular: { type: "rectangular", width: 20, height: 50 },
+        T: { type: "T", bf: 60, hf: 12, bw: 20, h: 50 },
+        I: { type: "I", bf: 60, hf: 12, bw: 20, h: 60, bi: 60, hi: 12 },
+      };
+      setFormData(sectionDefaults[value as string] || { type: value });
+    } else {
+      setFormData((prev) => ({ ...prev, [key]: value }));
+    }
     // Clear validation errors when user starts typing
     if (validationErrors.length > 0) {
       setValidationErrors([]);
