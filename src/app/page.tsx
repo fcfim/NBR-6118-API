@@ -1283,6 +1283,7 @@ function buildPayload(
       };
     case "cracking":
       return {
+        diameter: formData.diameter || 16,
         section: {
           type: "rectangular",
           width: formData.width || 20,
@@ -1291,10 +1292,9 @@ function buildPayload(
         materials: { concrete: formData.concrete || "C25" },
         loading: { ms: { value: formData.ms || 30, unit: "kN.m" } },
         reinforcement: {
-          diameter: formData.diameter || 16,
-          as: formData.as || 5,
+          As: formData.as || 5,
         },
-        environmentalClass: formData.caa || "II",
+        environment: { class: formData.caa || "II" },
       };
     default:
       return formData;
