@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChartsPanel } from "@/components/charts/ChartsPanel";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -183,6 +183,105 @@ function validateFields(
   return errors;
 }
 
+// Get default form data with realistic values pre-populated
+function getDefaultFormData(moduleKey: ModuleKey): Record<string, unknown> {
+  switch (moduleKey) {
+    case "section":
+      return { type: "rectangular", width: 20, height: 50 };
+    case "beam-flexure":
+      return {
+        width: 20,
+        height: 50,
+        mk: 80,
+        concrete: "C25",
+        steel: "CA-50",
+        cover: 2.5,
+      };
+    case "beam-shear":
+      return {
+        width: 20,
+        height: 50,
+        vsd: 120,
+        d: 45,
+        model: 1,
+        concrete: "C25",
+        stirrupSteel: "CA-60",
+      };
+    case "beam-torsion":
+      return {
+        width: 20,
+        height: 50,
+        tsd: 10,
+        vsd: 80,
+        concrete: "C25",
+        steel: "CA-50",
+      };
+    case "column":
+      return {
+        bx: 20,
+        by: 40,
+        length: 300,
+        nd: 800,
+        mx_top: 50,
+        mx_bot: 30,
+        concrete: "C25",
+        steel: "CA-50",
+      };
+    case "slab":
+      return {
+        Lx: 400,
+        Ly: 500,
+        h: 12,
+        dead: 4,
+        live: 2.5,
+        concrete: "C25",
+        type: 1,
+      };
+    case "punching":
+      return {
+        h: 20,
+        a: 30,
+        b: 30,
+        fsd: 600,
+        pillarType: "internal",
+        concrete: "C25",
+        rho_x: 0.005,
+        rho_y: 0.005,
+      };
+    case "deflection":
+      return {
+        width: 20,
+        height: 50,
+        mk: 70,
+        span: 500,
+        as: 5,
+        concrete: "C25",
+        beamType: "simple",
+      };
+    case "cracking":
+      return {
+        width: 20,
+        height: 50,
+        ms: 50,
+        diameter: 16,
+        as: 5,
+        concrete: "C25",
+        caa: "II",
+      };
+    case "anchorage":
+      return {
+        diameter: 16,
+        concrete: "C25",
+        steel: "CA-50",
+        barType: "ribbed",
+        bondZone: "good",
+        anchorageType: "straight",
+      };
+    default:
+      return {};
+  }
+}
+
 export default function Dashboard() {
   const [activeModule, setActiveModule] = useState<ModuleKey>("section");
   const [result, setResult] = useState<CalculationResult | null>(null);
@@ -318,8 +417,16 @@ function ModuleForm({
   onCalculate: (data: Record<string, unknown>) => void;
   isCalculating: boolean;
 }) {
-  const [formData, setFormData] = useState<Record<string, unknown>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>(() =>
+    getDefaultFormData(moduleKey)
+  );
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
+  // Reset form data when module changes
+  useEffect(() => {
+    setFormData(getDefaultFormData(moduleKey));
+    setValidationErrors([]);
+  }, [moduleKey]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
