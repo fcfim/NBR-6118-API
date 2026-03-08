@@ -9,7 +9,6 @@ import { SimpleBeamLoadInput } from "@/lib/schemas/load.schema";
 import {
   BUILDING_TYPES,
   SAFETY_FACTORS,
-  PsiFactors,
   GammaFactors,
 } from "@/data/loads/coefficients.data";
 
@@ -131,7 +130,7 @@ export class LoadService {
    */
   static calculateSimpleBeamMoment(
     load_kN_cm: number,
-    span_cm: number
+    span_cm: number,
   ): number {
     return (load_kN_cm * Math.pow(span_cm, 2)) / 8;
   }
@@ -140,7 +139,7 @@ export class LoadService {
    * Calculate load combinations
    */
   static calculateCombinations(
-    input: SimpleBeamLoadInput
+    input: SimpleBeamLoadInput,
   ): LoadCombinationResult {
     const { span, loads, parameters } = input;
 
@@ -155,11 +154,25 @@ export class LoadService {
     const psi = this.getPsiFactors(parameters);
     const gamma = this.getGammaFactors(parameters);
 
+    // NBR 6118:2023 Item 11.8 - Load combinations
+    // ELU: Fd = γg × Σ(Fg) + γq × [Fq1 + Σ(ψ0j × Fqj)]
+    // When permanent is favorable, γg_fav = 1.0 (NBR Table 11.1)
+    const gamma_g_eff = parameters.permanentFavorable ? 1.0 : gamma.gamma_g;
+
+    // Support for secondary variable loads
+    // NBR 6118:2023 Item 11.8: ψ factors applied per combination type
+    const q_sec_raw = loads.q_secondary ? normalizeLoad(loads.q_secondary) : 0;
+
     // Calculate distributed loads for each combination
-    const pd = gamma.gamma_g * g_total + gamma.gamma_q * q; // ELU
-    const p_rare = g_total + q; // ELS Rare
-    const p_frequent = g_total + psi.psi1 * q; // ELS Frequent
-    const p_quasiPermanent = g_total + psi.psi2 * q; // ELS Quasi-permanent
+    // ELU: secondary reduced by ψ₀
+    const pd =
+      gamma_g_eff * g_total + gamma.gamma_q * (q + psi.psi0 * q_sec_raw);
+    // ELS Rare: all loads at full value (Σ Fgi,k + Fq1,k + Σ Fqj,k)
+    const p_rare = g_total + q + q_sec_raw;
+    // ELS Frequent: principal × ψ₁, secondary × ψ₂
+    const p_frequent = g_total + psi.psi1 * q + psi.psi2 * q_sec_raw;
+    // ELS Quasi-permanent: all variables × ψ₂
+    const p_quasiPermanent = g_total + psi.psi2 * q + psi.psi2 * q_sec_raw;
 
     // Calculate moments
     const Md = this.calculateSimpleBeamMoment(pd, L);
@@ -167,7 +180,7 @@ export class LoadService {
     const Mk_frequent = this.calculateSimpleBeamMoment(p_frequent, L);
     const Mk_quasiPermanent = this.calculateSimpleBeamMoment(
       p_quasiPermanent,
-      L
+      L,
     );
 
     return {
