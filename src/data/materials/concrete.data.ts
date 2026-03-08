@@ -16,7 +16,7 @@
  *
  * ### Modulus of Elasticity (Section 8.2.8 - NBR 6118:2023)
  * - For fck ≤ 50 MPa: Eci = αe × 5600 × √fck
- * - For fck > 50 MPa: Eci = 21500 × ((fck/10) + 1.25)^(1/3)
+ * - For fck > 50 MPa: Eci = αe × 21500 × ((fck/10) + 1.25)^(1/3)
  *
  * αe depends on aggregate type:
  * - Basalt/Diabase: 1.2
@@ -83,7 +83,7 @@ const AGGREGATE_FACTORS: Record<AggregateType, number> = {
  */
 export function calcConcreteProperties(
   fck: number,
-  aggregate: AggregateType = "granite"
+  aggregate: AggregateType = "granite",
 ): ConcreteProperties {
   const alpha_e = AGGREGATE_FACTORS[aggregate];
 
@@ -99,7 +99,7 @@ export function calcConcreteProperties(
   const Eci =
     fck <= 50
       ? (alpha_e * 5600 * Math.sqrt(fck)) / 1000
-      : (21500 * Math.pow(fck / 10 + 1.25, 1 / 3)) / 1000;
+      : (alpha_e * 21500 * Math.pow(fck / 10 + 1.25, 1 / 3)) / 1000;
 
   // Ratio αi
   const alpha_i = Math.min(0.8 + 0.2 * (fck / 80), 1.0);
@@ -152,8 +152,11 @@ export const CONCRETE_CLASSES: Record<string, ConcreteProperties> = {
   C50: calcConcreteProperties(50),
   C55: calcConcreteProperties(55),
   C60: calcConcreteProperties(60),
+  C65: calcConcreteProperties(65),
   C70: calcConcreteProperties(70),
+  C75: calcConcreteProperties(75),
   C80: calcConcreteProperties(80),
+  C85: calcConcreteProperties(85),
   C90: calcConcreteProperties(90),
 };
 

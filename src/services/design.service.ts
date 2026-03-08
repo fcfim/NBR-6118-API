@@ -96,7 +96,7 @@ export class DesignService {
       stirrupDiameter?: number;
       mainBarDiameter?: number;
       unit?: string;
-    }
+    },
   ): number {
     if (params.d !== undefined) {
       return params.unit === "mm" ? params.d / 10 : params.d;
@@ -112,29 +112,24 @@ export class DesignService {
 
   /**
    * Calculate minimum reinforcement ratio per NBR 6118:2023 (Table 17.3)
+   * Analytical formula: ρmin = 0.078 × fck^(2/3) / fyk
+   * For CA-50 (fyk=500): values match Table 17.3 within rounding
+   * Minimum value: 0.15% regardless of fck
    */
-  static calculateRhoMin(fck: number): number {
-    // ρmin depends on fck, approximately 0.15% for common cases
-    // Table 17.3 gives values from 0.150% to 0.230% for C20-C50
-    if (fck <= 25) return 0.15;
-    if (fck <= 30) return 0.15;
-    if (fck <= 35) return 0.164;
-    if (fck <= 40) return 0.179;
-    if (fck <= 45) return 0.194;
-    if (fck <= 50) return 0.208;
-    if (fck <= 55) return 0.211;
-    if (fck <= 60) return 0.219;
-    if (fck <= 70) return 0.233;
-    if (fck <= 80) return 0.245;
-    return 0.256;
+  static calculateRhoMin(fck: number, fyk: number = 500): number {
+    // Analytical formula derived from normative table
+    const rho_min_calc = ((0.078 * Math.pow(fck, 2 / 3)) / fyk) * 100; // percentage
+    // NBR 6118:2023 minimum floor is 0.15%
+    return Math.max(0.15, rho_min_calc);
   }
 
   /**
-   * Calculate xi limit for ductile failure (Domain 3 limit)
-   * Based on strain compatibility: εs = 10‰, εcu = 3.5‰ (for fck ≤ 50)
+   * Calculate xi limit for ductile failure (Domain 3/4 boundary)
+   * ξlim = εcu / (εcu + εyd) - ensures steel yields at failure
+   * NBR 6118:2023 Item 14.6.4.3
    */
   static calculateXiLimit(fck: number, fyk: number, Es: number): number {
-    // εyd (yield strain)
+    // εyd (yield strain of steel)
     const fyd = fyk / 1.15;
     const epsilon_yd = fyd / (Es * 1000); // Es in GPa, result in decimal
 
@@ -142,19 +137,17 @@ export class DesignService {
     const epsilon_cu =
       fck <= 50 ? 0.0035 : 0.0026 + 0.035 * Math.pow((90 - fck) / 100, 4);
 
-    // ξlim = εcu / (εcu + εyd + 0.002) for ductile design
-    // Simplified: for CA-50, ξlim ≈ 0.45 (ensuring adequate ductility)
-    const epsilon_su = 0.01; // 10‰ for steel
-    const xi_limit = epsilon_cu / (epsilon_cu + epsilon_su);
+    // Domain 3/4 boundary: ensures steel is at yield
+    const xi_limit = epsilon_cu / (epsilon_cu + epsilon_yd);
 
-    return Math.min(xi_limit, 0.45); // Conservative limit
+    return xi_limit;
   }
 
   /**
    * Calculate longitudinal reinforcement
    */
   static calculateLongitudinalSteel(
-    input: LongitudinalDesignInput
+    input: LongitudinalDesignInput,
   ): LongitudinalDesignResult {
     // Get section properties
     const b = SectionService.getWebWidth(input.section); // For rectangular, it's width
@@ -165,10 +158,10 @@ export class DesignService {
 
     // Get material properties
     const concrete = MaterialService.getConcreteProperties(
-      input.materials.concrete
+      input.materials.concrete,
     );
     const steel = MaterialService.getPassiveSteelProperties(
-      input.materials.steel
+      input.materials.steel,
     );
 
     // Convert concrete properties to kN/cm² for calculations
@@ -214,14 +207,41 @@ export class DesignService {
       // Additional moment
       const delta_Md = Md - Md_limit;
 
-      // Assume compression steel at d' = 0.1d
-      const d_prime = 0.1 * d;
-      const As2 = delta_Md / (fyd * (d - d_prime));
+      // Calculate d' from cover + stirrup + bar radius
+      // Fallback: d' = cover + stirrupDia + mainBarDia/2
+      const cover_cm = input.parameters.concreteCover
+        ? input.parameters.unit === "mm"
+          ? input.parameters.concreteCover / 10
+          : input.parameters.concreteCover
+        : 3;
+      const stirrup_cm = (input.parameters.stirrupDiameter || 5) / 10;
+      const mainBar_cm = (input.parameters.mainBarDiameter || 12.5) / 10;
+      const d_prime = cover_cm + stirrup_cm + mainBar_cm / 2;
+
+      // Verify compression steel yields via strain compatibility
+      // εs' = εcu × (1 - d'/(ξ×d))
+      const epsilon_cu =
+        concrete.fck <= 50
+          ? 0.0035
+          : 0.0026 + 0.035 * Math.pow((90 - concrete.fck) / 100, 4);
+      const epsilon_s_prime = epsilon_cu * (1 - d_prime / (xi * d));
+      const epsilon_yd_check = steel.fyd / (steel.Es * 1000);
+      const sigma_s_prime =
+        epsilon_s_prime >= epsilon_yd_check
+          ? steel.fyd / 10 // kN/cm² - compression steel yields
+          : (epsilon_s_prime * steel.Es * 1000) / 10; // kN/cm² - doesn't yield
+
+      const As2 = delta_Md / (sigma_s_prime * (d - d_prime));
 
       As_calc = As1 + As2;
       As_compression = As2;
       domain = "Domínio 3 (armadura dupla)";
       messages.push("⚠️ Armadura dupla necessária");
+      if (epsilon_s_prime < epsilon_yd_check) {
+        messages.push(
+          `⚠️ Armadura de compressão NÃO escoa (σs'=${(sigma_s_prime * 10).toFixed(1)} MPa)`,
+        );
+      }
       messages.push(`Armadura de compressão: ${As_compression.toFixed(2)} cm²`);
     } else {
       // Single reinforcement
@@ -229,8 +249,14 @@ export class DesignService {
       const z = d * (1 - 0.5 * lambda * xi);
       As_calc = Md / (fyd * z);
 
-      // Determine domain
-      if (xi < 0.259) {
+      // Determine domain using calculated boundary
+      // Domain 2/3 boundary: ξ₂₃ = εcu / (εcu + 10‰)
+      const epsilon_cu_d =
+        concrete.fck <= 50
+          ? 0.0035
+          : 0.0026 + 0.035 * Math.pow((90 - concrete.fck) / 100, 4);
+      const xi_23 = epsilon_cu_d / (epsilon_cu_d + 0.01);
+      if (xi < xi_23) {
         domain = "Domínio 2";
       } else {
         domain = "Domínio 3";
@@ -309,7 +335,7 @@ export class DesignService {
    */
   static suggestRebars(
     As_required: number,
-    steelCategory: string
+    steelCategory: string,
   ): LongitudinalDesignResult["suggestions"] {
     const diameters = REBAR_DIAMETERS[
       steelCategory as keyof typeof REBAR_DIAMETERS

@@ -74,11 +74,13 @@ export const LoadParametersSchema = z
     gamma_g: z.number().min(1).max(2).optional(),
     /** Manual γq override */
     gamma_q: z.number().min(1).max(2).optional(),
+    /** Whether permanent load is favorable (reduces effect) - uses γg = 1.0 */
+    permanentFavorable: z.boolean().optional().default(false),
   })
   .refine(
     (data) =>
       data.buildingType || (data.psi1 !== undefined && data.psi2 !== undefined),
-    { message: "Informe buildingType ou forneça psi1 e psi2 manualmente" }
+    { message: "Informe buildingType ou forneça psi1 e psi2 manualmente" },
   );
 
 /**
@@ -96,6 +98,8 @@ export const SimpleBeamLoadSchema = z.object({
     g2: LoadValueSchema.optional(),
     /** Variable load - live load (q) */
     q: LoadValueSchema,
+    /** Secondary variable load - wind, etc. (q_secondary) - reduced by ψ₀ automatically */
+    q_secondary: LoadValueSchema.optional(),
   }),
   /** Combination parameters */
   parameters: LoadParametersSchema,

@@ -151,11 +151,12 @@ function calculateSlabReinforcement(
   moment: number,
   d: number,
   b: number, // width = 100cm for per-meter calculation
+  h: number, // slab total thickness (cm) for spacing limits
   fck: number,
   fyk: number,
   minRatio: number,
   direction: "x" | "y",
-  type: "positive" | "negative"
+  type: "positive" | "negative",
 ): SlabReinforcement {
   const fcd = fck / 1.4 / 10; // kN/cm²
   const fyd = fyk / 1.15 / 10; // kN/cm²
@@ -164,8 +165,15 @@ function calculateSlabReinforcement(
   const mu = moment / (b * d * d * fcd);
 
   // Check domain limit
-  const xi_lim = 0.45; // Domain 3 limit
-  const mu_lim = 0.295; // Corresponding mu limit
+  // Calculate xi_lim from actual material properties
+  // ξlim = εcu / (εcu + εyd) for fck ≤ 50
+  const epsilon_cu_slab =
+    fck <= 50 ? 0.0035 : 0.0026 + 0.035 * Math.pow((90 - fck) / 100, 4);
+  const fyd_val = fyk / 1.15;
+  const epsilon_yd_slab = fyd_val / 210000; // Es = 210 GPa
+  const xi_lim = epsilon_cu_slab / (epsilon_cu_slab + epsilon_yd_slab);
+  const lambda_sb = fck <= 50 ? 0.8 : 0.8 - (fck - 50) / 400;
+  const mu_lim = lambda_sb * xi_lim * (1 - 0.5 * lambda_sb * xi_lim);
 
   let As: number;
   if (mu > mu_lim) {
@@ -187,7 +195,7 @@ function calculateSlabReinforcement(
   const As_gov = Math.max(As, As_min);
 
   // Suggest detailing
-  const { diameter, spacing } = suggestSlabDetailing(As_gov);
+  const { diameter, spacing } = suggestSlabDetailing(As_gov, h);
 
   return {
     direction,
@@ -205,10 +213,23 @@ function calculateSlabReinforcement(
 /**
  * Suggest practical slab detailing
  */
-function suggestSlabDetailing(As_per_meter: number): {
+/**
+ * Suggest practical slab detailing with NBR 6118:2023 spacing limits
+ * Item 20.1: s_max_main = min(2h, 20cm), s_max_dist = 33cm
+ */
+function suggestSlabDetailing(
+  As_per_meter: number,
+  h: number,
+  isDistribution: boolean = false,
+): {
   diameter: number;
   spacing: number;
 } {
+  // NBR 6118:2023 Item 20.1 - Maximum spacing limits
+  const s_max = isDistribution
+    ? 33 // Distribution reinforcement: 33cm
+    : Math.min(2 * h, 20); // Main reinforcement: min(2h, 20cm)
+
   // Common slab bar diameters
   const diameters = [6.3, 8.0, 10.0, 12.5];
 
@@ -219,8 +240,8 @@ function suggestSlabDetailing(As_per_meter: number): {
     // Round down to practical value
     const practicalSpacing = Math.floor(spacing / 2.5) * 2.5;
 
-    // Check limits (5cm min, 20cm max for main, 30cm for distribution)
-    if (practicalSpacing >= 7.5 && practicalSpacing <= 20) {
+    // Check limits (5cm min, s_max for type)
+    if (practicalSpacing >= 5 && practicalSpacing <= s_max) {
       return { diameter, spacing: practicalSpacing };
     }
   }
@@ -228,7 +249,10 @@ function suggestSlabDetailing(As_per_meter: number): {
   // If no good option found, use larger diameter with minimum spacing
   const diameter = 12.5;
   const areaPerBar = (Math.PI * diameter * diameter) / 400;
-  const spacing = Math.max(5, Math.min(20, (areaPerBar / As_per_meter) * 100));
+  const spacing = Math.max(
+    5,
+    Math.min(s_max, (areaPerBar / As_per_meter) * 100),
+  );
 
   return { diameter, spacing: Math.floor(spacing / 2.5) * 2.5 || 10 };
 }
@@ -237,7 +261,7 @@ function suggestSlabDetailing(As_per_meter: number): {
  * Calculate slab design
  */
 export function calculateSlabDesign(
-  params: SlabDesignParams
+  params: SlabDesignParams,
 ): SlabDesignResult {
   const {
     geometry,
@@ -258,7 +282,7 @@ export function calculateSlabDesign(
   const h_min = getMinimumThickness(slabType);
   if (h < h_min) {
     messages.push(
-      `⚠️ Espessura h=${h}cm menor que mínimo ${h_min}cm para ${slabType}`
+      `⚠️ Espessura h=${h}cm menor que mínimo ${h_min}cm para ${slabType}`,
     );
   }
 
@@ -269,15 +293,14 @@ export function calculateSlabDesign(
 
   // Total design load (kN/m²)
   const totalLoad = gamma_f * (deadLoad + liveLoad);
-  // Convert to kN/cm² for internal calculation
-  const p_kN_cm2 = totalLoad / 10000;
+  // totalLoad is in kN/m², used by coefficient-based moment formulas
 
   // Determine support case
   const supportCase = determineSupportCase(
     supports.top,
     supports.bottom,
     supports.left,
-    supports.right
+    supports.right,
   );
 
   // Get coefficients
@@ -295,7 +318,12 @@ export function calculateSlabDesign(
     } else {
       coefficients = { mx_pos: 1 / 8, my_pos: 0 };
     }
+    // NBR 6118:2023 Item 20.1: Distribution reinforcement for one-way slabs
+    // Must be >= 20% of main reinforcement area or rho_min
     messages.push("ℹ️ Laje armada em uma direção (λ > 2)");
+    messages.push(
+      "ℹ️ Armadura de distribuição perpendicular ≥ 20% da principal (ou ρmin)",
+    );
   } else {
     coefficients = getBaresCoefficients(lambda, supportCase);
     messages.push(`ℹ️ Laje armada em duas direções (λ = ${lambda.toFixed(2)})`);
@@ -343,12 +371,13 @@ export function calculateSlabDesign(
         Mx_pos_kNcm,
         dx,
         100,
+        h,
         fck,
         fyk,
         minRatio,
         "x",
-        "positive"
-      )
+        "positive",
+      ),
     );
   }
 
@@ -359,12 +388,38 @@ export function calculateSlabDesign(
         My_pos_kNcm,
         dy,
         100,
+        h,
         fck,
         fyk,
         minRatio,
         "y",
-        "positive"
-      )
+        "positive",
+      ),
+    );
+  } else if (isOneWay) {
+    // NBR 6118:2023 Item 20.1 — Distribution reinforcement for one-way slabs
+    // As_dist ≥ max(20% of main reinforcement, ρmin × b × d)
+    const xPosReinf = reinforcement.find(
+      (r) => r.direction === "x" && r.type === "positive",
+    );
+    const As_main = xPosReinf?.As_gov ?? 0;
+    const As_dist_from_main = 0.2 * As_main;
+    const As_dist_from_min = minRatio * 100 * dy;
+    const As_dist = Math.max(As_dist_from_main, As_dist_from_min);
+    const detailingDist = suggestSlabDetailing(As_dist, h, true);
+    reinforcement.push({
+      direction: "y",
+      type: "positive",
+      moment: 0,
+      d: dy,
+      As: As_dist,
+      As_min: As_dist_from_min,
+      As_gov: As_dist,
+      diameter: detailingDist.diameter,
+      spacing: detailingDist.spacing,
+    });
+    messages.push(
+      `ℹ️ Armadura de distribuição Y: ${As_dist.toFixed(2)} cm²/m (≥ 20% da principal)`,
     );
   }
 
@@ -375,12 +430,13 @@ export function calculateSlabDesign(
         Mx_neg_kNcm,
         dx,
         100,
+        h,
         fck,
         fyk,
         minRatio,
         "x",
-        "negative"
-      )
+        "negative",
+      ),
     );
   }
 
@@ -391,27 +447,28 @@ export function calculateSlabDesign(
         My_neg_kNcm,
         dy,
         100,
+        h,
         fck,
         fyk,
         minRatio,
         "y",
-        "negative"
-      )
+        "negative",
+      ),
     );
   }
 
   // Build detailing summary
   const xPos = reinforcement.find(
-    (r) => r.direction === "x" && r.type === "positive"
+    (r) => r.direction === "x" && r.type === "positive",
   );
   const yPos = reinforcement.find(
-    (r) => r.direction === "y" && r.type === "positive"
+    (r) => r.direction === "y" && r.type === "positive",
   );
   const xNeg = reinforcement.find(
-    (r) => r.direction === "x" && r.type === "negative"
+    (r) => r.direction === "x" && r.type === "negative",
   );
   const yNeg = reinforcement.find(
-    (r) => r.direction === "y" && r.type === "negative"
+    (r) => r.direction === "y" && r.type === "negative",
   );
 
   const detailing = {
@@ -422,7 +479,7 @@ export function calculateSlabDesign(
   };
 
   messages.push(
-    `ℹ️ Caso ${supportCase}: ${getSupportDescription(supportCase)}`
+    `ℹ️ Caso ${supportCase}: ${getSupportDescription(supportCase)}`,
   );
   messages.push(`✅ Armadura calculada`);
 

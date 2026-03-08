@@ -139,7 +139,7 @@ function getEta3(diameter: number): number {
  * Get α coefficient for anchorage type
  */
 function getAnchorageAlpha(
-  anchorageType: AnchorageParams["anchorageType"]
+  anchorageType: AnchorageParams["anchorageType"],
 ): number {
   switch (anchorageType) {
     case "straight":
@@ -156,28 +156,65 @@ function getAnchorageAlpha(
 }
 
 /**
- * Get splice α coefficient from Table 9.3
+ * Get splice α coefficient from Table 9.3 - NBR 6118:2023
+ *
+ * Table 9.3 - Splice coefficient αot
+ * ┌──────────────────┬──────────────┬──────────────┬──────────────┐
+ * │ % bars spliced   │  a ≤ 5φ      │ 5φ < a ≤ 10φ │  a > 10φ     │
+ * │ in same section  │  (or c < 3φ) │ (c ≥ 3φ)     │  (c ≥ 3φ)    │
+ * ├──────────────────┼──────────────┼──────────────┼──────────────┤
+ * │      ≤ 20%       │     1.2      │     1.0      │     1.0      │
+ * │    20% - 25%     │     1.4      │     1.0      │     1.0      │
+ * │    25% - 33%     │     1.6      │     1.2      │     1.0      │
+ * │    33% - 50%     │     1.8      │     1.4      │     1.2      │
+ * │      > 50%       │     2.0      │     1.6      │     1.4      │
+ * └──────────────────┴──────────────┴──────────────┴──────────────┘
+ * where: a = center-to-center spacing between splices
+ *        c = concrete cover
+ *        φ = bar diameter
  */
-function getSpliceAlpha(
+export function getSpliceAlpha(
   splicePercentage: number,
   barSpacing: number,
-  diameter: number
+  diameter: number,
 ): number {
-  const spacingRatio = barSpacing / (diameter / 10); // spacing in cm, diameter in mm
+  // Convert: barSpacing in cm, diameter in mm → spacingRatio in diameters
+  const phi_cm = diameter / 10;
+  const spacingRatio = barSpacing / phi_cm; // a/φ
 
-  if (splicePercentage <= 25) {
-    if (spacingRatio <= 6) return 1.2;
-    if (spacingRatio <= 10) return 1.0;
-    return 1.0;
-  } else if (splicePercentage <= 50) {
-    if (spacingRatio <= 6) return 1.4;
-    if (spacingRatio <= 10) return 1.2;
-    return 1.0;
+  // Column selection based on spacing ratio
+  let column: 0 | 1 | 2;
+  if (spacingRatio <= 5) {
+    column = 0; // a ≤ 5φ (compact)
+  } else if (spacingRatio <= 10) {
+    column = 1; // 5φ < a ≤ 10φ
   } else {
-    if (spacingRatio <= 6) return 2.0;
-    if (spacingRatio <= 10) return 1.4;
-    return 1.2;
+    column = 2; // a > 10φ (well-spaced)
   }
+
+  // Row selection based on splice percentage
+  // NBR 6118:2023 Table 9.3 values [row][column]
+  const alphaTable: number[][] = [
+    // ≤20%, 20-25%, 25-33%, 33-50%, >50%
+    [1.2, 1.4, 1.6, 1.8, 2.0], // column 0: a ≤ 5φ
+    [1.0, 1.0, 1.2, 1.4, 1.6], // column 1: 5φ < a ≤ 10φ
+    [1.0, 1.0, 1.0, 1.2, 1.4], // column 2: a > 10φ
+  ];
+
+  let row: number;
+  if (splicePercentage <= 20) {
+    row = 0;
+  } else if (splicePercentage <= 25) {
+    row = 1;
+  } else if (splicePercentage <= 33) {
+    row = 2;
+  } else if (splicePercentage <= 50) {
+    row = 3;
+  } else {
+    row = 4;
+  }
+
+  return alphaTable[column][row];
 }
 
 /**
@@ -186,16 +223,25 @@ function getSpliceAlpha(
 function calculateHookDimensions(
   diameter: number,
   hookType: AnchorageParams["anchorageType"],
-  barType: BondStrengthParams["barType"] = "ribbed"
+  barType: BondStrengthParams["barType"] = "ribbed",
 ): HookDimensions | undefined {
   if (hookType === "straight") return undefined;
 
-  // Minimum bend radius
+  // Minimum bend radius per NBR 6118:2023 Table 9.1
   let r_min: number;
-  if (barType === "smooth" && diameter <= 20) {
-    r_min = 2.5 * diameter;
+  if (barType === "smooth") {
+    // CA-25
+    if (diameter <= 10) r_min = 2 * diameter;
+    else if (diameter <= 20) r_min = 4 * diameter;
+    else r_min = 6 * diameter;
+  } else if (barType === "notched") {
+    // CA-60 (fios entalhados)
+    r_min = 3 * diameter; // φ ≤ 9.5mm typically
   } else {
-    r_min = 5 * diameter;
+    // CA-50 (ribbed)
+    if (diameter <= 10) r_min = 5 * diameter;
+    else if (diameter <= 20) r_min = 8 * diameter;
+    else r_min = 10 * diameter;
   }
 
   // Straight extension
@@ -219,8 +265,8 @@ function calculateHookDimensions(
     hookType === "hook_180"
       ? Math.PI * r_min
       : hookType === "hook_90"
-      ? 0.5 * Math.PI * r_min
-      : 0.25 * Math.PI * r_min;
+        ? 0.5 * Math.PI * r_min
+        : 0.25 * Math.PI * r_min;
 
   const totalLength = arcLength + extension;
 
@@ -256,7 +302,7 @@ export function calculateBondStrength(params: BondStrengthParams): {
  */
 export function calculateAnchorage(
   params: AnchorageParams,
-  bondParams: BondStrengthParams
+  bondParams: BondStrengthParams,
 ): AnchorageResult {
   const { diameter, fyd, As_calc, As_ef, anchorageType } = params;
 
@@ -288,12 +334,12 @@ export function calculateAnchorage(
   const hook = calculateHookDimensions(
     diameter,
     anchorageType,
-    bondParams.barType
+    bondParams.barType,
   );
 
   if (alpha < 1.0) {
     messages.push(
-      `✅ Gancho reduz comprimento em ${((1 - alpha) * 100).toFixed(0)}%`
+      `✅ Gancho reduz comprimento em ${((1 - alpha) * 100).toFixed(0)}%`,
     );
   }
 
@@ -302,7 +348,7 @@ export function calculateAnchorage(
   }
 
   messages.push(
-    `ℹ️ lb = ${lb.toFixed(1)} cm, lb,nec = ${lb_nec.toFixed(1)} cm`
+    `ℹ️ lb = ${lb.toFixed(1)} cm, lb,nec = ${lb_nec.toFixed(1)} cm`,
   );
 
   return {
@@ -335,7 +381,7 @@ export function calculateSplice(params: SpliceParams): SpliceResult {
   const l0_min = Math.max(
     0.3 * alphaTable * lb_nec,
     (15 * diameter) / 10, // in cm
-    20 // cm
+    20, // cm
   );
 
   l0 = Math.max(l0, l0_min);
@@ -377,7 +423,7 @@ export interface FullAnchorageResult {
 }
 
 export function calculateFullAnchorage(
-  params: FullAnchorageParams
+  params: FullAnchorageParams,
 ): FullAnchorageResult {
   const fyd = params.fyk / 1.15;
 
