@@ -186,7 +186,7 @@ function interpolateCoefficient(
   coef2: number,
   lambda: number,
   lambda1: number,
-  lambda2: number
+  lambda2: number,
 ): number {
   const t = (lambda - lambda1) / (lambda2 - lambda1);
   return lerp(coef1, coef2, t);
@@ -197,7 +197,7 @@ function interpolateCoefficient(
  */
 export function getBaresCoefficients(
   lambda: number,
-  supportCase: SupportCase
+  supportCase: SupportCase,
 ): SlabCoefficients {
   // Clamp λ to valid range
   const clampedLambda = Math.max(1.0, Math.min(2.0, lambda));
@@ -231,14 +231,14 @@ export function getBaresCoefficients(
       upperCoefs.mx_pos,
       clampedLambda,
       lowerLambda,
-      upperLambda
+      upperLambda,
     ),
     my_pos: interpolateCoefficient(
       lowerCoefs.my_pos,
       upperCoefs.my_pos,
       clampedLambda,
       lowerLambda,
-      upperLambda
+      upperLambda,
     ),
   };
 
@@ -248,7 +248,7 @@ export function getBaresCoefficients(
       upperCoefs.mx_neg,
       clampedLambda,
       lowerLambda,
-      upperLambda
+      upperLambda,
     );
   }
 
@@ -258,7 +258,7 @@ export function getBaresCoefficients(
       upperCoefs.my_neg,
       clampedLambda,
       lowerLambda,
-      upperLambda
+      upperLambda,
     );
   }
 
@@ -272,7 +272,7 @@ export function determineSupportCase(
   top: "free" | "simply" | "fixed",
   bottom: "free" | "simply" | "fixed",
   left: "free" | "simply" | "fixed",
-  right: "free" | "simply" | "fixed"
+  right: "free" | "simply" | "fixed",
 ): SupportCase {
   const isFixedTop = top === "fixed";
   const isFixedBottom = bottom === "fixed";
@@ -313,7 +313,13 @@ export function determineSupportCase(
  * Minimum slab thickness (cm) - Item 13.2.4.1
  */
 export function getMinimumThickness(
-  slabType: "floor" | "roof" | "cantilever" | "prestressed"
+  slabType:
+    | "floor"
+    | "roof"
+    | "cantilever"
+    | "prestressed"
+    | "flat_slab"
+    | "mushroom",
 ): number {
   switch (slabType) {
     case "floor":
@@ -324,6 +330,10 @@ export function getMinimumThickness(
       return 10;
     case "prestressed":
       return 15;
+    case "flat_slab":
+      return 16; // NBR 6118:2023 Item 13.2.4.1 - Laje lisa sem vigas
+    case "mushroom":
+      return 14; // NBR 6118:2023 Item 13.2.4.1 - Laje cogumelo com capitéis
     default:
       return 8;
   }

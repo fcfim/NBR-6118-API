@@ -102,8 +102,10 @@ export const PASSIVE_STEEL_CLASSES: Record<string, PassiveSteelProperties> = {
     Es: 210,
     epsilon_yd: (600 / 1.15 / 210000) * 1000, // ≈ 2.48‰
     epsilon_su: 10,
+    // NBR 6118:2023 Table 8.3: η1 = 1.0 for smooth wire, 1.4 for indented wire
+    // Default to 1.0 (smooth). For indented CA-60, override eta1 to 1.4 at call site.
     eta1: 1.0,
-    description: "Fios de aço trefilado",
+    description: "Fios de aço trefilado (liso η1=1.0; entalhado usar η1=1.4)",
   },
 };
 
@@ -150,7 +152,7 @@ export const ACTIVE_STEEL_CLASSES: Record<string, ActiveSteelProperties> = {
   "CP-150-RN": {
     designation: "CP-150-RN",
     fptk: 1500,
-    fpyk: 1200, // 0.8 × 1500
+    fpyk: 1275, // 0.85 × 1500 (RN uses 0.85 factor per NBR 6118:2023)
     Ep: 200,
     relaxation: "RN",
     type: "wire",
@@ -199,7 +201,7 @@ export function rebarArea(diameter_mm: number): number {
  */
 export function rebarsNeeded(
   requiredArea_cm2: number,
-  diameter_mm: number
+  diameter_mm: number,
 ): number {
   const singleArea = rebarArea(diameter_mm);
   return Math.ceil(requiredArea_cm2 / singleArea);

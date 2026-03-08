@@ -45,6 +45,10 @@ export interface ShearDesignParams {
   fywk: number;
   /** Design shear force (kN) */
   Vsd: number;
+  /** Design normal force (kN) - positive for compression, negative for tension */
+  Nsd?: number;
+  /** Section area for normal stress calculation (cm²) */
+  Ac?: number;
   /** Gamma c (default 1.4) */
   gamma_c?: number;
   /** Gamma s (default 1.15) */
@@ -118,7 +122,7 @@ export interface ShearDesignResult {
  * Calculate shear design for reinforced concrete beam
  */
 export function calculateShearDesign(
-  params: ShearDesignParams
+  params: ShearDesignParams,
 ): ShearDesignResult {
   const {
     bw,
@@ -128,6 +132,8 @@ export function calculateShearDesign(
     fctk_inf,
     fywk,
     Vsd,
+    Nsd = 0,
+    Ac,
     gamma_c = 1.4,
     gamma_s = 1.15,
     model = 1,
@@ -183,20 +189,47 @@ export function calculateShearDesign(
     messages.push("❌ Vsd > VRd2: Aumentar dimensões da seção ou fck");
   }
 
-  // Calculate Vc (concrete contribution) - Model I
-  // For simple flexure without axial force
-  let Vc: number;
+  // Calculate Vc (concrete contribution)
+  // NBR 6118:2023, Item 17.4.2.2
+  // Vc0 = 0.6 × fctd × bw × d (simple flexure reference)
+  const Vc0 = 0.6 * fctd * bw * d;
 
-  if (model === 1) {
-    // Vc = 0.6 × fctd × bw × d (flexão simples)
-    Vc = 0.6 * fctd * bw * d;
+  // Account for normal force effect on Vc
+  // NBR 6118:2023 Item 17.4.2.2:
+  //   With compression (Nsd > 0): Vc = Vc0 × (1 + M0/Msd_max) ≤ 2×Vc0
+  //   With tension (Nsd < 0):     Vc = Vc0 × (1 + Msd_max/M0) ≥ 0
+  //   M0 = cracking moment from normal force
+  let Vc_corrected: number;
+  if (Nsd !== 0 && Ac && Ac > 0) {
+    // σcp = Nsd / Ac (kN/cm²; positive = compression)
+    const sigma_cp = Nsd / Ac; // kN/cm²
+    // M0 = 0.9 × d × Nsd (simplified decompression moment)
+    // Here we use simplified correction factor: 1 + σcp/(3.5 × fctd)
+    const correction = 1 + sigma_cp / (3.5 * fctd);
+    if (Nsd > 0) {
+      // Compression improves Vc (capped at 2×Vc0)
+      Vc_corrected = Math.min(Vc0 * Math.max(correction, 0), 2 * Vc0);
+      messages.push(
+        `ℹ️ Vc corrigido por compressão (σcp=${(sigma_cp * 10).toFixed(2)} MPa)`,
+      );
+    } else {
+      // Tension reduces Vc (floored at 0)
+      Vc_corrected = Math.max(Vc0 * correction, 0);
+      messages.push(
+        `⚠️ Vc reduzido por tração (σcp=${(sigma_cp * 10).toFixed(2)} MPa)`,
+      );
+    }
   } else {
-    // Model II: Vc = 0 (conservative) or varies with θ
-    // Vc = Vc1 when θ = 45°, Vc = 0 when θ = 30°
-    // Linear interpolation
-    const Vc_45 = 0.6 * fctd * bw * d;
+    Vc_corrected = Vc0;
+  }
+
+  let Vc: number;
+  if (model === 1) {
+    Vc = Vc_corrected;
+  } else {
+    // Model II: Vc varies linearly from Vc0 (θ=45°) to 0 (θ=30°)
     const factor = (theta - 30) / 15; // 0 to 1 as θ goes from 30 to 45
-    Vc = factor * Vc_45;
+    Vc = factor * Vc_corrected;
   }
 
   // Required steel contribution
@@ -293,7 +326,7 @@ export function calculateShearDesign(
 function suggestStirrupDetailing(
   asw_s: number,
   s_max: number,
-  bw: number
+  bw: number,
 ): ShearDesignResult["detailing"] {
   const suggestions: ShearDesignResult["detailing"] = [];
 
@@ -315,7 +348,7 @@ function suggestStirrupDetailing(
       // Round down to practical value
       const practicalSpacing = Math.min(
         Math.floor(spacing / 2.5) * 2.5, // round to 2.5cm
-        s_max
+        s_max,
       );
 
       if (practicalSpacing >= 5 && practicalSpacing <= s_max) {
@@ -354,7 +387,7 @@ export function stirrupArea(diameter_mm: number, legs: number = 2): number {
 export function aswsProvided(
   diameter_mm: number,
   legs: number,
-  spacing_cm: number
+  spacing_cm: number,
 ): number {
   const area = stirrupArea(diameter_mm, legs);
   return (area / spacing_cm) * 100; // cm²/m
