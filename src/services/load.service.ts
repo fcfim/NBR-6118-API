@@ -167,7 +167,9 @@ export class LoadService {
     // ELU: secondary reduced by ψ₀
     const pd =
       gamma_g_eff * g_total + gamma.gamma_q * (q + psi.psi0 * q_sec_raw);
-    // ELS Rare: all loads at full value (Σ Fgi,k + Fq1,k + Σ Fqj,k)
+    // ELS Rare: all variable loads at full characteristic value (no ψ reduction).
+    // q_secondary is treated as an independent variable action, applied at its
+    // full characteristic value alongside the principal action (NBR 6118:2023 Item 11.8).
     const p_rare = g_total + q + q_sec_raw;
     // ELS Frequent: principal × ψ₁, secondary × ψ₂
     const p_frequent = g_total + psi.psi1 * q + psi.psi2 * q_sec_raw;

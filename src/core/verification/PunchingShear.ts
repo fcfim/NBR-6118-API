@@ -11,7 +11,8 @@
  * - τsd = Fsd / (u × d)
  *
  * ## Resistance without Reinforcement (τRd1) - Item 19.5.3.1
- * - τRd1 = 0.13 × (1 + √(20/d)) × ∛(100 × ρ × fck)
+ * - τRd1 = (0.18 / γc) × k × ∛(100 × ρ × fck)
+ * - k = min(1 + √(20/d), 2.0)  [γc = 1.4]
  *
  * ## Diagonal Compression Limit (τRd2) - Item 19.5.3.2
  * - τRd2 = 0.27 × αv2 × fcd

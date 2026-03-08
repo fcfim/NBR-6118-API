@@ -151,6 +151,7 @@ function calculateSlabReinforcement(
   moment: number,
   d: number,
   b: number, // width = 100cm for per-meter calculation
+  h: number, // slab total thickness (cm) for spacing limits
   fck: number,
   fyk: number,
   minRatio: number,
@@ -194,7 +195,7 @@ function calculateSlabReinforcement(
   const As_gov = Math.max(As, As_min);
 
   // Suggest detailing
-  const { diameter, spacing } = suggestSlabDetailing(As_gov);
+  const { diameter, spacing } = suggestSlabDetailing(As_gov, h);
 
   return {
     direction,
@@ -218,7 +219,7 @@ function calculateSlabReinforcement(
  */
 function suggestSlabDetailing(
   As_per_meter: number,
-  h: number = 12,
+  h: number,
   isDistribution: boolean = false,
 ): {
   diameter: number;
@@ -240,7 +241,7 @@ function suggestSlabDetailing(
     const practicalSpacing = Math.floor(spacing / 2.5) * 2.5;
 
     // Check limits (5cm min, s_max for type)
-    if (practicalSpacing >= 7.5 && practicalSpacing <= s_max) {
+    if (practicalSpacing >= 5 && practicalSpacing <= s_max) {
       return { diameter, spacing: practicalSpacing };
     }
   }
@@ -370,6 +371,7 @@ export function calculateSlabDesign(
         Mx_pos_kNcm,
         dx,
         100,
+        h,
         fck,
         fyk,
         minRatio,
@@ -386,6 +388,7 @@ export function calculateSlabDesign(
         My_pos_kNcm,
         dy,
         100,
+        h,
         fck,
         fyk,
         minRatio,
@@ -427,6 +430,7 @@ export function calculateSlabDesign(
         Mx_neg_kNcm,
         dx,
         100,
+        h,
         fck,
         fyk,
         minRatio,
@@ -443,6 +447,7 @@ export function calculateSlabDesign(
         My_neg_kNcm,
         dy,
         100,
+        h,
         fck,
         fyk,
         minRatio,
