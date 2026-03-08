@@ -62,8 +62,12 @@ export interface DeflectionParams {
   As?: number;
   /** Beam type */
   beamType?: "simple" | "cantilever" | "continuous";
-  /** Loading duration for creep (months) */
+  /** Loading duration (months). Default: 60 (5 years) */
   loadingDuration?: number;
+  /** Quasi-permanent service moment (kN.cm). If provided, used for creep deflection.
+   *  NBR 6118:2023 Item 17.3.2.1: δ_total = δ_imediata(Ma) + αf × δ_imediata(Ma_qp)
+   *  If omitted, uses Ma for both (conservative simplification). */
+  Ma_quasiPermanent?: number;
 }
 
 export interface DeflectionResult {
@@ -131,7 +135,7 @@ function estimateCrackedInertia(
   b: number,
   d: number,
   As?: number,
-  alpha_e?: number
+  alpha_e?: number,
 ): number {
   if (As && alpha_e) {
     // More accurate calculation
@@ -146,28 +150,65 @@ function estimateCrackedInertia(
 }
 
 /**
- * Calculate creep coefficient from loading duration
- * Based on NBR 6118 Table 17.1
+ * Calculate creep multiplier Δξ from loading duration
+ * Based on NBR 6118:2023 Table 17.1
+ *
+ * Table 17.1 - Values of Δξ for calculating αf
+ * ┌──────────────────┬───────┐
+ * │ Duration (months)│  Δξ   │
+ * ├──────────────────┼───────┤
+ * │       0.5        │  0.68 │
+ * │       1          │  0.84 │
+ * │       2          │  0.96 │
+ * │       3          │  1.04 │
+ * │       4          │  1.08 │
+ * │       6          │  1.16 │
+ * │      12          │  1.32 │
+ * │      18          │  1.40 │
+ * │      24          │  1.44 │
+ * │      60          │  1.68 │
+ * │     ≥ 70 (∞)     │  2.00 │
+ * └──────────────────┴───────┘
  */
-function getCreepCoefficient(durationMonths: number): number {
-  if (durationMonths <= 0.5) return 0.68;
-  if (durationMonths <= 1) return 0.85;
-  if (durationMonths <= 2) return 0.98;
-  if (durationMonths <= 3) return 1.05;
-  if (durationMonths <= 4) return 1.1;
-  if (durationMonths <= 6) return 1.17;
-  if (durationMonths <= 12) return 1.3;
-  if (durationMonths <= 18) return 1.39;
-  if (durationMonths <= 24) return 1.45;
-  if (durationMonths <= 60) return 1.68;
-  return 2.0; // > 5 years
+export function getCreepCoefficient(durationMonths: number): number {
+  // Tabulated values [duration_months, delta_xi]
+  const table: [number, number][] = [
+    [0, 0],
+    [0.5, 0.68],
+    [1, 0.84],
+    [2, 0.96],
+    [3, 1.04],
+    [4, 1.08],
+    [6, 1.16],
+    [12, 1.32],
+    [18, 1.4],
+    [24, 1.44],
+    [60, 1.68],
+    [70, 2.0],
+  ];
+
+  // Clamp to table range
+  if (durationMonths <= 0) return 0;
+  if (durationMonths >= 70) return 2.0;
+
+  // Linear interpolation between tabulated points
+  for (let i = 1; i < table.length; i++) {
+    if (durationMonths <= table[i][0]) {
+      const [t0, v0] = table[i - 1];
+      const [t1, v1] = table[i];
+      const ratio = (durationMonths - t0) / (t1 - t0);
+      return v0 + ratio * (v1 - v0);
+    }
+  }
+
+  return 2.0; // Fallback for > 70 months
 }
 
 /**
  * Calculate beam deflection for ELS verification
  */
 export function calculateDeflection(
-  params: DeflectionParams
+  params: DeflectionParams,
 ): DeflectionResult {
   const {
     span,
@@ -248,8 +289,51 @@ export function calculateDeflection(
   const deltaXi = getCreepCoefficient(loadingDuration);
   const alpha_f = deltaXi / (1 + 50 * rho_prime);
 
-  // Creep deflection
-  const creep = immediate * alpha_f;
+  // NBR 6118:2023 Item 17.3.2.1 — Precise creep deflection
+  // δ_total = δ_imediata(p_total) + αf × δ_imediata(p_quase_permanente)
+  let creep: number;
+  if (
+    params.Ma_quasiPermanent !== undefined &&
+    params.Ma_quasiPermanent !== Ma
+  ) {
+    const Ma_qp = params.Ma_quasiPermanent;
+    // Recalculate effective inertia for quasi-permanent moment
+    let Ie_qp: number;
+    if (Ma_qp < Mcr) {
+      Ie_qp = Ic; // not cracked under quasi-permanent load
+    } else {
+      const ratio_qp = Mcr / Ma_qp;
+      const ratio3_qp = Math.pow(ratio_qp, 3);
+      Ie_qp = ratio3_qp * Ic + (1 - ratio3_qp) * III;
+      Ie_qp = Math.max(Ie_qp, III);
+      Ie_qp = Math.min(Ie_qp, Ic);
+    }
+    // Immediate deflection under quasi-permanent load
+    let immediate_qp: number;
+    switch (beamType) {
+      case "simple":
+        immediate_qp =
+          (5 * Ma_qp * Math.pow(span, 2)) / (48 * Ecs_kN_cm2 * Ie_qp);
+        break;
+      case "cantilever":
+        immediate_qp = (Ma_qp * Math.pow(span, 2)) / (2 * Ecs_kN_cm2 * Ie_qp);
+        break;
+      case "continuous":
+        immediate_qp =
+          (0.7 * (5 * Ma_qp * Math.pow(span, 2))) / (48 * Ecs_kN_cm2 * Ie_qp);
+        break;
+      default:
+        immediate_qp =
+          (5 * Ma_qp * Math.pow(span, 2)) / (48 * Ecs_kN_cm2 * Ie_qp);
+    }
+    creep = immediate_qp * alpha_f;
+    messages.push(
+      "ℹ️ Flecha diferida calculada com carga quase-permanente separada",
+    );
+  } else {
+    // Simplified: assume all load is quasi-permanent
+    creep = immediate * alpha_f;
+  }
 
   // Total deflection
   const total = immediate + creep;

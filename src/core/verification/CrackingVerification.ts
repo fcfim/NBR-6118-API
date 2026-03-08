@@ -43,6 +43,8 @@ export interface CrackingParams {
   eta1?: number;
   /** Environmental aggressiveness class */
   environmentClass?: "I" | "II" | "III" | "IV";
+  /** Section width (cm) - default 100 for per-meter slab calculations */
+  b?: number;
 }
 
 export interface CrackingResult {
@@ -90,7 +92,7 @@ export interface CrackingResult {
  * Get crack width limit based on environmental class
  */
 function getCrackLimit(
-  environmentClass: CrackingParams["environmentClass"]
+  environmentClass: CrackingParams["environmentClass"],
 ): number {
   switch (environmentClass) {
     case "I":
@@ -110,7 +112,7 @@ function getCrackLimit(
  * Get environmental class description
  */
 function getEnvironmentDescription(
-  environmentClass: CrackingParams["environmentClass"]
+  environmentClass: CrackingParams["environmentClass"],
 ): string {
   switch (environmentClass) {
     case "I":
@@ -171,6 +173,7 @@ export function verifyCracking(params: CrackingParams): CrackingResult {
     Es = 210, // GPa
     eta1 = 2.25, // ribbed bars
     environmentClass = "II",
+    b: b_param,
   } = params;
 
   const messages: string[] = [];
@@ -188,10 +191,27 @@ export function verifyCracking(params: CrackingParams): CrackingResult {
   // Steel modulus in MPa
   const Esi = Es * 1000; // GPa to MPa
 
-  // Crack width calculation
-  // wk = (3 × φ × σsi²) / (12.5 × η1 × Esi × fctm)
-  // φ in mm, σsi and fctm in MPa, Esi in MPa → wk in mm
-  const wk = (3 * diameter * sigma_si * sigma_si) / (12.5 * eta1 * Esi * fctm);
+  // Area of concrete surrounding the reinforcement (Acri)
+  // Implementation: Acri = b_section × min(7.5φ, cover_zone)
+  // where cover_zone is approximated from effective depth and lever arm.
+  // This approximates the tributary zone around each bar layer.
+  const phi_cm = diameter / 10; // mm to cm
+  const cover_approx = d > 0 ? (z > 0 ? d - z + phi_cm : 4) : 4;
+  const h_acri = Math.min(7.5 * phi_cm, cover_approx);
+  const b_section = b_param ?? 100; // per-meter width default for slabs; beams should pass actual width
+  const Acri = b_section * h_acri;
+  const rho_ri = Acri > 0 ? As / Acri : As / (b_section * 2 * phi_cm);
+
+  // Crack width formula 1 (NBR 6118:2023 Item 17.3.3.2)
+  // w₁ = (φ / (12.5 × η₁)) × (σsi / Esi) × (3 × σsi / fctm)
+  const w1 = (3 * diameter * sigma_si * sigma_si) / (12.5 * eta1 * Esi * fctm);
+
+  // Crack width formula 2 (NBR 6118:2023 Item 17.3.3.2)
+  // w₂ = (φ / (12.5 × η₁)) × (σsi / Esi) × (4/ρri + 45)
+  const w2 = (diameter / (12.5 * eta1)) * (sigma_si / Esi) * (4 / rho_ri + 45);
+
+  // wk = min(w₁, w₂) per NBR 6118:2023
+  const wk = Math.min(w1, w2);
 
   // Crack width limit
   const wk_limit = getCrackLimit(environmentClass);
@@ -210,18 +230,18 @@ export function verifyCracking(params: CrackingParams): CrackingResult {
   if (isValid) {
     messages.push(
       `✅ wk = ${wk.toFixed(3)}mm ≤ ${wk_limit}mm (${getEnvironmentDescription(
-        environmentClass
-      )})`
+        environmentClass,
+      )})`,
     );
   } else {
     messages.push(
-      `❌ wk = ${wk.toFixed(3)}mm > ${wk_limit}mm - Fissuração excessiva`
+      `❌ wk = ${wk.toFixed(3)}mm > ${wk_limit}mm - Fissuração excessiva`,
     );
   }
 
   if (sigma_si > 240) {
     messages.push(
-      `⚠️ σsi = ${sigma_si.toFixed(1)} MPa - Tensão elevada na armadura`
+      `⚠️ σsi = ${sigma_si.toFixed(1)} MPa - Tensão elevada na armadura`,
     );
   }
 

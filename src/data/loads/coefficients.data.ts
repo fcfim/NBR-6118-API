@@ -118,6 +118,13 @@ export const BUILDING_TYPES: Record<string, PsiFactors> = {
     description:
       "Variações uniformes de temperatura em relação à média anual local",
   },
+  HOSPITAL: {
+    psi0: 0.6,
+    psi1: 0.4,
+    psi2: 0.2,
+    label: "Hospitais",
+    description: "Hospitais, escolas, creches",
+  },
   PASSARELA: {
     psi0: 0.6,
     psi1: 0.4,
@@ -185,7 +192,7 @@ export function calculateMd(
   Mk_g: number,
   Mk_q: number,
   gamma_g: number = 1.4,
-  gamma_q: number = 1.4
+  gamma_q: number = 1.4,
 ): number {
   return gamma_g * Mk_g + gamma_q * Mk_q;
 }
@@ -196,7 +203,7 @@ export function calculateMd(
 export function calculateMk_frequent(
   Mk_g: number,
   Mk_q: number,
-  psi1: number
+  psi1: number,
 ): number {
   return Mk_g + psi1 * Mk_q;
 }
@@ -207,7 +214,7 @@ export function calculateMk_frequent(
 export function calculateMk_quasiPermanent(
   Mk_g: number,
   Mk_q: number,
-  psi2: number
+  psi2: number,
 ): number {
   return Mk_g + psi2 * Mk_q;
 }

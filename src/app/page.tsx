@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { ChartsPanel } from "@/components/charts/ChartsPanel";
+import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
 import {
   Calculator,
   Layers,
@@ -111,6 +114,174 @@ const MODULES: {
   },
 ];
 
+// Required fields for each module
+const REQUIRED_FIELDS: Record<ModuleKey, { key: string; label: string }[]> = {
+  section: [{ key: "type", label: "Tipo de Seção" }],
+  "beam-flexure": [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "mk", label: "Momento Característico (Mk)" },
+  ],
+  "beam-shear": [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "vsd", label: "Cortante de Cálculo (Vsd)" },
+  ],
+  "beam-torsion": [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "tsd", label: "Torção de Cálculo (Tsd)" },
+  ],
+  column: [
+    { key: "bx", label: "Dimensão bx" },
+    { key: "by", label: "Dimensão by" },
+    { key: "length", label: "Comprimento" },
+    { key: "nd", label: "Força Normal (Nd)" },
+  ],
+  slab: [
+    { key: "Lx", label: "Vão Lx" },
+    { key: "Ly", label: "Vão Ly" },
+    { key: "h", label: "Espessura (h)" },
+  ],
+  punching: [
+    { key: "h", label: "Espessura da Laje (h)" },
+    { key: "a", label: "Dimensão a do pilar" },
+    { key: "b", label: "Dimensão b do pilar" },
+    { key: "fsd", label: "Força de Punção (Fsd)" },
+  ],
+  deflection: [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "mk", label: "Momento de Serviço (Ma)" },
+    { key: "span", label: "Vão (L)" },
+    { key: "as", label: "Área de Aço (As)" },
+  ],
+  cracking: [
+    { key: "width", label: "Largura (bw)" },
+    { key: "height", label: "Altura (h)" },
+    { key: "ms", label: "Momento de Serviço (Ms)" },
+    { key: "diameter", label: "Diâmetro da Barra" },
+    { key: "as", label: "Área de Aço (As)" },
+  ],
+  anchorage: [{ key: "diameter", label: "Diâmetro da Barra" }],
+};
+
+// Validate required fields
+function validateFields(
+  moduleKey: ModuleKey,
+  formData: Record<string, unknown>
+): string[] {
+  const errors: string[] = [];
+  const required = REQUIRED_FIELDS[moduleKey] || [];
+
+  for (const field of required) {
+    const value = formData[field.key];
+    if (value === undefined || value === "" || value === null) {
+      errors.push(`${field.label} é obrigatório`);
+    }
+  }
+  return errors;
+}
+
+// Get default form data with realistic values pre-populated
+function getDefaultFormData(moduleKey: ModuleKey): Record<string, unknown> {
+  switch (moduleKey) {
+    case "section":
+      return { type: "rectangular", width: 20, height: 50 };
+    case "beam-flexure":
+      return {
+        width: 20,
+        height: 50,
+        mk: 80,
+        concrete: "C25",
+        steel: "CA-50",
+        cover: 2.5,
+      };
+    case "beam-shear":
+      return {
+        width: 20,
+        height: 50,
+        vsd: 120,
+        d: 45,
+        model: 1,
+        concrete: "C25",
+        stirrupSteel: "CA-60",
+      };
+    case "beam-torsion":
+      return {
+        width: 20,
+        height: 50,
+        tsd: 10,
+        vsd: 80,
+        concrete: "C25",
+        steel: "CA-50",
+      };
+    case "column":
+      return {
+        bx: 20,
+        by: 40,
+        length: 300,
+        nd: 800,
+        mx_top: 50,
+        mx_bot: 30,
+        concrete: "C25",
+        steel: "CA-50",
+      };
+    case "slab":
+      return {
+        Lx: 400,
+        Ly: 500,
+        h: 12,
+        dead: 4,
+        live: 2.5,
+        concrete: "C25",
+        type: 1,
+      };
+    case "punching":
+      return {
+        h: 20,
+        a: 30,
+        b: 30,
+        fsd: 600,
+        pillarType: "internal",
+        concrete: "C25",
+        rho_x: 0.005,
+        rho_y: 0.005,
+      };
+    case "deflection":
+      return {
+        width: 20,
+        height: 50,
+        mk: 70,
+        span: 500,
+        as: 5,
+        concrete: "C25",
+        beamType: "simple",
+      };
+    case "cracking":
+      return {
+        width: 20,
+        height: 50,
+        ms: 50,
+        diameter: 16,
+        as: 5,
+        concrete: "C25",
+        caa: "II",
+      };
+    case "anchorage":
+      return {
+        diameter: 16,
+        concrete: "C25",
+        steel: "CA-50",
+        barType: "ribbed",
+        bondZone: "good",
+        anchorageType: "straight",
+      };
+    default:
+      return {};
+  }
+}
+
 export default function Dashboard() {
   const [activeModule, setActiveModule] = useState<ModuleKey>("section");
   const [result, setResult] = useState<CalculationResult | null>(null);
@@ -139,30 +310,12 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-linear-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                <Calculator className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-slate-900">
-                  NBR 6118 API
-                </h1>
-                <p className="text-xs text-slate-500">Cálculo Estrutural</p>
-              </div>
-            </div>
-            <div className="text-sm text-slate-500">
-              12 Endpoints • NBR 6118:2023
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Content */}
+      <div className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Sidebar - Module Selection */}
           <aside className="lg:col-span-3">
@@ -241,9 +394,15 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Charts Panel - below the two columns */}
+            <ChartsPanel result={result} activeModule={activeModule} />
           </main>
         </div>
       </div>
+
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }
@@ -258,20 +417,67 @@ function ModuleForm({
   onCalculate: (data: Record<string, unknown>) => void;
   isCalculating: boolean;
 }) {
-  const [formData, setFormData] = useState<Record<string, unknown>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>(() =>
+    getDefaultFormData(moduleKey)
+  );
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
+  // Reset form data when module changes
+  useEffect(() => {
+    setFormData(getDefaultFormData(moduleKey));
+    setValidationErrors([]);
+  }, [moduleKey]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate required fields
+    const errors = validateFields(moduleKey, formData);
+    setValidationErrors(errors);
+
+    if (errors.length > 0) {
+      return; // Don't submit if there are validation errors
+    }
+
     onCalculate(buildPayload(moduleKey, formData));
   };
 
   const updateField = (key: string, value: unknown) => {
-    setFormData((prev) => ({ ...prev, [key]: value }));
+    // When section type changes, apply appropriate default values
+    if (moduleKey === "section" && key === "type") {
+      const sectionDefaults: Record<string, Record<string, unknown>> = {
+        rectangular: { type: "rectangular", width: 20, height: 50 },
+        T: { type: "T", bf: 60, hf: 12, bw: 20, h: 50 },
+        I: { type: "I", bf: 60, hf: 12, bw: 20, h: 60, bi: 60, hi: 12 },
+      };
+      setFormData(sectionDefaults[value as string] || { type: value });
+    } else {
+      setFormData((prev) => ({ ...prev, [key]: value }));
+    }
+    // Clear validation errors when user starts typing
+    if (validationErrors.length > 0) {
+      setValidationErrors([]);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {renderFormFields(moduleKey, formData, updateField)}
+
+      {/* Validation Errors */}
+      {validationErrors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-red-700 font-medium text-sm mb-1">
+            <AlertCircle className="w-4 h-4" />
+            Campos obrigatórios não preenchidos:
+          </div>
+          <ul className="list-disc list-inside text-sm text-red-600 space-y-0.5">
+            {validationErrors.map((error, i) => (
+              <li key={i}>{error}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <button
         type="submit"
@@ -376,7 +582,8 @@ function renderFormFields(
   updateField: (key: string, value: unknown) => void
 ) {
   switch (moduleKey) {
-    case "section":
+    case "section": {
+      const sectionType = (formData.type as string) || "rectangular";
       return (
         <div className="space-y-4">
           <SelectField
@@ -386,28 +593,153 @@ function renderFormFields(
             onChange={updateField}
             options={[
               { value: "rectangular", label: "Retangular" },
-              { value: "t", label: "T" },
-              { value: "i", label: "I" },
+              { value: "T", label: "T (Viga T)" },
+              { value: "I", label: "I (Duplo T)" },
             ]}
           />
-          <div className="grid grid-cols-2 gap-4">
-            <InputField
-              label="Largura"
-              name="width"
-              value={formData.width}
-              onChange={updateField}
-              unit="cm"
-            />
-            <InputField
-              label="Altura"
-              name="height"
-              value={formData.height}
-              onChange={updateField}
-              unit="cm"
-            />
-          </div>
+
+          {/* Rectangular Section Fields */}
+          {sectionType === "rectangular" && (
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <p className="text-sm font-medium text-slate-700 mb-2">
+                Dimensões
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <InputField
+                  label="Largura (b)"
+                  name="width"
+                  value={formData.width}
+                  onChange={updateField}
+                  unit="cm"
+                />
+                <InputField
+                  label="Altura (h)"
+                  name="height"
+                  value={formData.height}
+                  onChange={updateField}
+                  unit="cm"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* T-Section Fields */}
+          {sectionType === "T" && (
+            <div className="space-y-3">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm font-medium text-blue-700 mb-2">
+                  Mesa (Flange)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura mesa (bf)"
+                    name="bf"
+                    value={formData.bf}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura mesa (hf)"
+                    name="hf"
+                    value={formData.hf}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm font-medium text-slate-700 mb-2">
+                  Alma (Web)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura alma (bw)"
+                    name="bw"
+                    value={formData.bw}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura total (h)"
+                    name="h"
+                    value={formData.h}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* I-Section Fields */}
+          {sectionType === "I" && (
+            <div className="space-y-3">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm font-medium text-blue-700 mb-2">
+                  Mesa Superior
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura (bf)"
+                    name="bf"
+                    value={formData.bf}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura (hf)"
+                    name="hf"
+                    value={formData.hf}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm font-medium text-slate-700 mb-2">Alma</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura (bw)"
+                    name="bw"
+                    value={formData.bw}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura total (h)"
+                    name="h"
+                    value={formData.h}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm font-medium text-amber-700 mb-2">
+                  Mesa Inferior
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <InputField
+                    label="Largura (bi)"
+                    name="bi"
+                    value={formData.bi}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                  <InputField
+                    label="Altura (hi)"
+                    name="hi"
+                    value={formData.hi}
+                    onChange={updateField}
+                    unit="cm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
+    }
 
     case "beam-flexure":
       return (
@@ -1022,12 +1354,35 @@ function buildPayload(
   formData: Record<string, unknown>
 ): Record<string, unknown> {
   switch (moduleKey) {
-    case "section":
-      return {
-        type: formData.type || "rectangular",
-        width: formData.width || 20,
-        height: formData.height || 50,
-      };
+    case "section": {
+      const type = (formData.type as string) || "rectangular";
+      if (type === "rectangular") {
+        return {
+          type,
+          width: formData.width || 20,
+          height: formData.height || 50,
+        };
+      } else if (type === "T") {
+        return {
+          type,
+          bf: formData.bf || 60,
+          hf: formData.hf || 12,
+          bw: formData.bw || 20,
+          h: formData.h || 50,
+        };
+      } else {
+        // I-Section
+        return {
+          type,
+          bf: formData.bf || 60,
+          hf: formData.hf || 12,
+          bw: formData.bw || 20,
+          h: formData.h || 60,
+          bi: formData.bi || 60,
+          hi: formData.hi || 12,
+        };
+      }
+    }
     case "beam-flexure":
       return {
         section: {
@@ -1039,7 +1394,7 @@ function buildPayload(
           concrete: formData.concrete || "C25",
           steel: formData.steel || "CA-50",
         },
-        loading: { mk: { value: formData.mk || 45, unit: "kN.m" } },
+        loading: { mk: { value: formData.mk || 80, unit: "kN.m" } },
         parameters: { concreteCover: formData.cover || 2.5 },
       };
     case "beam-shear":
@@ -1053,7 +1408,7 @@ function buildPayload(
           concrete: formData.concrete || "C25",
           stirrupSteel: formData.steel || "CA-50",
         },
-        loading: { vsd: formData.vsd || 80 },
+        loading: { vsd: formData.vsd || 120 },
         parameters: {
           d: formData.d || 45,
           model: parseInt(formData.model as string) || 1,
@@ -1067,7 +1422,7 @@ function buildPayload(
           concrete: formData.concrete || "C30",
           steel: formData.steel || "CA-50",
         },
-        loading: { nd: formData.nd || 1200, mx_top: formData.mx_top || 0 },
+        loading: { nd: formData.nd || 800, mx_top: formData.mx_top || 50 },
       };
     case "slab":
       return {
@@ -1077,7 +1432,7 @@ function buildPayload(
           h: formData.h || 12,
         },
         materials: { concrete: formData.concrete || "C25" },
-        loading: { dead: formData.dead || 5, live: formData.live || 2 },
+        loading: { dead: formData.dead || 4, live: formData.live || 2.5 },
       };
     case "anchorage":
       return {
@@ -1104,7 +1459,7 @@ function buildPayload(
           steel: formData.steel || "CA-50",
         },
         loading: {
-          tsd: { value: formData.tsd || 15, unit: "kN.m" },
+          tsd: { value: formData.tsd || 10, unit: "kN.m" },
           vsd: formData.vsd ? { value: formData.vsd, unit: "kN" } : undefined,
           vrd2: formData.vrd2 || undefined,
         },
@@ -1118,7 +1473,7 @@ function buildPayload(
           type: formData.pillarType || "internal",
         },
         materials: { concrete: formData.concrete || "C30" },
-        loading: { fsd: formData.fsd || 500 },
+        loading: { fsd: formData.fsd || 600 },
         reinforcement: {
           rho_x: formData.rho_x || 0.005,
           rho_y: formData.rho_y || 0.005,
@@ -1132,24 +1487,29 @@ function buildPayload(
           height: formData.height || 50,
         },
         materials: { concrete: formData.concrete || "C25" },
-        span: formData.span || 500,
-        loading: { mk: { value: formData.mk || 45, unit: "kN.m" } },
-        reinforcement: { as: formData.as || 5 },
+        loading: {
+          ma: { value: formData.mk || 70, unit: "kN.m" },
+          span: { value: formData.span || 500, unit: "cm" },
+        },
+        parameters: {
+          beamType: "simple",
+          As: formData.as || 5,
+        },
       };
     case "cracking":
       return {
+        diameter: formData.diameter || 16,
         section: {
           type: "rectangular",
           width: formData.width || 20,
           height: formData.height || 50,
         },
         materials: { concrete: formData.concrete || "C25" },
-        loading: { ms: { value: formData.ms || 30, unit: "kN.m" } },
+        loading: { ms: { value: formData.ms || 50, unit: "kN.m" } },
         reinforcement: {
-          diameter: formData.diameter || 16,
-          as: formData.as || 5,
+          As: formData.as || 5,
         },
-        environmentalClass: formData.caa || "II",
+        environment: { class: formData.caa || "II" },
       };
     default:
       return formData;

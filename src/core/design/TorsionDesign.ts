@@ -37,6 +37,8 @@ export interface TorsionDesignParams {
   fyk: number;
   /** Steel yield strength - transverse (MPa) */
   fywk?: number;
+  /** Strut inclination angle (degrees), 30° ≤ θ ≤ 45°. Default: 45° */
+  theta?: number;
 }
 
 export interface TorsionDesignResult {
@@ -104,11 +106,34 @@ export interface TorsionDesignResult {
  * Calculate torsion design
  */
 export function calculateTorsionDesign(
-  params: TorsionDesignParams
+  params: TorsionDesignParams,
 ): TorsionDesignResult {
-  const { b, h, d, Tsd, Vsd, VRd2, fck, fyk, fywk = fyk } = params;
+  const {
+    b,
+    h,
+    d: _d, // Not used directly in torsion (uses he), kept for interface compatibility
+    Tsd,
+    Vsd,
+    VRd2,
+    fck,
+    fyk,
+    fywk = fyk,
+    theta = 45,
+  } = params;
 
   const messages: string[] = [];
+
+  // Validate θ range (NBR 6118:2023 Item 17.5.1.5)
+  const thetaClamped = Math.max(30, Math.min(45, theta));
+  const thetaRad = (thetaClamped * Math.PI) / 180;
+  const cotTheta = 1 / Math.tan(thetaRad);
+
+  if (theta !== thetaClamped) {
+    messages.push(`⚠️ θ ajustado para ${thetaClamped}° (faixa: 30° a 45°)`);
+  }
+  if (thetaClamped < 45) {
+    messages.push(`ℹ️ Modelo com θ = ${thetaClamped}° (otimizado)`);
+  }
 
   // Design strengths
   const fcd = fck / 1.4 / 10; // kN/cm²
@@ -139,15 +164,19 @@ export function calculateTorsionDesign(
     messages.push("❌ Tsd > TRd2: Aumentar dimensões da seção");
   }
 
-  // Reinforcement calculation
-  // Asl = Tsd / (2 × Ae × fyd) - distributed around perimeter
-  // Ast/s = Tsd / (2 × Ae × fywd)
-  const Asl = Math.abs(Tsd) / (2 * Ae * fyd);
-  const Ast_s = (Math.abs(Tsd) / (2 * Ae * fywd)) * 100; // cm²/m
+  // Reinforcement calculation (NBR 6118:2023 Item 17.5.1.5)
+  // With variable θ:
+  //   Asl = Tsd × cotθ / (2 × Ae × fyd) - distributed around perimeter
+  //   Ast/s = Tsd / (2 × Ae × fywd × cotθ)
+  const Asl = (Math.abs(Tsd) * cotTheta) / (2 * Ae * fyd);
+  const Ast_s = (Math.abs(Tsd) / (2 * Ae * fywd * cotTheta)) * 100; // cm²/m
 
   // Minimum reinforcement
-  // Simplified: use same minimums as for shear
-  const fctm = 0.3 * Math.pow(fck, 2 / 3);
+  // fctm per NBR 6118:2023 Item 8.2.5 (valid for all fck ranges)
+  const fctm =
+    fck <= 50
+      ? 0.3 * Math.pow(fck, 2 / 3) // fck ≤ 50 MPa
+      : 2.12 * Math.log(1 + 0.11 * fck); // fck > 50 MPa
   const rho_sw_min = (0.2 * (fctm / 10)) / (fywk / 10);
   const Ast_s_min = rho_sw_min * b * 100; // cm²/m
 
@@ -176,14 +205,14 @@ export function calculateTorsionDesign(
     if (!interaction.isValid) {
       messages.push(
         `❌ Interação torção-cisalhamento: ${(combinedRatio * 100).toFixed(
-          0
-        )}% > 100%`
+          0,
+        )}% > 100%`,
       );
     } else {
       messages.push(
         `✅ Interação torção-cisalhamento: ${(combinedRatio * 100).toFixed(
-          0
-        )}% ≤ 100%`
+          0,
+        )}% ≤ 100%`,
       );
     }
   }
@@ -197,7 +226,7 @@ export function calculateTorsionDesign(
 
   messages.push(`ℹ️ Asl = ${Asl_gov.toFixed(2)} cm² (distribuir no perímetro)`);
   messages.push(
-    `ℹ️ Ast/s = ${Ast_s_gov.toFixed(2)} cm²/m (adicionar aos estribos)`
+    `ℹ️ Ast/s = ${Ast_s_gov.toFixed(2)} cm²/m (adicionar aos estribos)`,
   );
 
   return {
