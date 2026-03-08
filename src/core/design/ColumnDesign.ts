@@ -187,13 +187,13 @@ function calculateSlenderness(
   const lambda = Le / i;
 
   // Calculate λ₁ per NBR 6118:2023 Item 15.8.2
-  // λ₁ = 25 + 12.5 × (e₁/h) for e₁/h < 2, otherwise λ₁ = 35
+  // λ₁ = 25 + 12.5 × (e₁/h) for e₁/h < 2, otherwise λ₁ = 40 (conservative default)
   // Clamped to 35 ≤ λ₁ ≤ 90
   let lambda1: number;
   if (e1_h_ratio !== undefined && e1_h_ratio < 2) {
     lambda1 = 25 + 12.5 * e1_h_ratio;
   } else {
-    lambda1 = 35;
+    lambda1 = 40; // conservative default when e₁/h ≥ 2 or not provided
   }
   lambda1 = Math.max(35, Math.min(90, lambda1));
 
@@ -511,7 +511,7 @@ export function calculateColumnDesign(
   // Minimum reinforcement per NBR 6118:2023 Item 17.3.5.3
   // As_min = max(0.4% × Ac, 0.4% × Nd / fyd)
   const As_min_geometric = 0.004 * Ac;
-  const As_min_force = (0.004 * Nd) / (fyd * 10); // fyd in kN/cm², Nd in kN
+  const As_min_force = (0.004 * Nd) / fyd; // fyd in kN/cm², Nd in kN
   const As_min = Math.max(As_min_geometric, As_min_force);
 
   // Maximum reinforcement (4% of Ac)

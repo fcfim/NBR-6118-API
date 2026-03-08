@@ -192,8 +192,9 @@ export function verifyCracking(params: CrackingParams): CrackingResult {
   const Esi = Es * 1000; // GPa to MPa
 
   // Area of concrete surrounding the reinforcement (Acri)
-  // Acri = b_effective × min(7.5φ, cover_zone)
-  // For simplified calculation: Acri ≈ b × 2.5 × (2 × cover_approx + φ)
+  // Implementation: Acri = b_section × min(7.5φ, cover_zone)
+  // where cover_zone is approximated from effective depth and lever arm.
+  // This approximates the tributary zone around each bar layer.
   const phi_cm = diameter / 10; // mm to cm
   const cover_approx = d > 0 ? (z > 0 ? d - z + phi_cm : 4) : 4;
   const h_acri = Math.min(7.5 * phi_cm, cover_approx);
